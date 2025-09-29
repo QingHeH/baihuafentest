@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>考公百化分检测</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">考公百化分检测</div>
+            <div class="description">将百分比转换为分数，只需输入分母数字</div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+        </div>
+        
+        <div class="question-list" id="questionList">
+            <!-- 题目将通过JavaScript动态生成 -->
+        </div>
+        
+        <div class="button-group">
+            <button class="btn btn-primary" id="submitBtn">提交答案</button>
+            <button class="btn btn-secondary" id="resetBtn">重新开始</button>
+        </div>
+        
+        <div class="total-score" id="totalScore">
+            <div class="score-title">最终成绩</div>
+            <div class="score-number" id="scoreNumber">0分</div>
+            <div class="score-detail" id="scoreDetail">答对 0/0 题</div>
+        </div>
+    </div>
+
+    <script>
+        // 题库数据 - 百分数转分数
+        const questionBank = [
+            { question: "5.3% = ?", answer: "1/19" },
+            { question: "5.6% ≈ ?", answer: "1/18" },
+            { question: "5.9% = ?", answer: "1/17" },
+            { question: "6.25% = ?", answer: "1/16" },
+            { question: "6.7% ≈ ?", answer: "1/15" },
+            { question: "7.1% ≈ ?", answer: "1/14" },
+            { question: "7.7% = ?", answer: "1/13" },
+            { question: "8.3% ≈ ?", answer: "1/12" },
+            { question: "9.1% = ?", answer: "1/11" },
+            { question: "9.5% ≈ ?", answer: "1/10.5" },
+            { question: "10.5% ≈ ?", answer: "1/9.5" },
+            { question: "11.1% ≈ ?", answer: "1/9.1" },
+            { question: "12% ≈ ?", answer: "1/8.3" },
+            { question: "12.5% ≈ ?", answer: "1/8" },
+            { question: "13% = ?", answer: "1/7.7" },
+            { question: "14% ≈ ?", answer: "1/7.1" },
+            { question: "14.3% ≈ ?", answer: "1/7" },
+            { question: "15% ≈ ?", answer: "1/6.7" },
+            { question: "16% = ?", answer: "1/6.3" },
+            { question: "16.7% ≈ ?", answer: "1/6" },
+            { question: "17% ≈ ?", answer: "1/5.9" },
+            { question: "18% ≈ ?", answer: "1/5.6" },
+            { question: "19% ≈ ?", answer: "1/5.3" },
+            { question: "20% ≈ ?", answer: "1/5" },
+            { question: "22.2% ≈ ?", answer: "1/4.5" },
+            { question: "24% ≈ ?", answer: "1/4.2" },
+            { question: "25% ≈ ?", answer: "1/4" },
+            { question: "28.6% ≈ ?", answer: "1/3.5" },
+            { question: "37% ≈ ?", answer: "1/2.7" },
+            { question: "42% ≈ ?", answer: "1/2.4" },
+            { question: "67% = ?", answer: "1/1.5" }
+        ];
+
+        // 当前显示的题目
+        let currentQuestions = [];
+        let showResult = false;
+
+        // 初始化
+        function init() {
+            // 随机排序题目
+            currentQuestions = [...questionBank]
+                .sort(() => Math.random() - 0.5)
+                .map((item, index) => ({
+                    ...item,
+                    userAnswer: '',
+                    status: '',
+                    isCorrect: false,
+                    originalIndex: index
+                }));
+
+            // 生成题目列表
+            const questionList = document.getElementById('questionList');
+            questionList.innerHTML = '';
+            
+            currentQuestions.forEach((q, index) => {
+                const questionItem = document.createElement('div');
+                questionItem.className = 'question-item';
+                questionItem.innerHTML = `
+                    <div class="question-title">${index + 1}. ${q.question}</div>
+                    <div class="fraction-input-group">
+                        <span class="fraction-symbol">1/</span>
+                        <input 
+                            class="answer-input" 
+                            type="text" 
+                            placeholder="输入分母数字"
+                            value="${q.userAnswer}"
+                            data-index="${index}"
+                        />
+                    </div>
+                    <div class="input-tip">只需输入分母数字（如：19 或 10.5）</div>
+                    <div class="answer-display" id="answerDisplay${index}">
+                        <div class="correct-answer">正确答案: ${q.answer}</div>
+                        <div class="answer-status" id="answerStatus${index}"></div>
+                    </div>
+                `;
+                questionList.appendChild(questionItem);
+            });
+            
+            // 绑定输入事件
+            document.querySelectorAll('.answer-input').forEach(input => {
+                input.addEventListener('input', onInput);
+            });
+            
+            // 隐藏结果区域
+            document.getElementById('totalScore').style.display = 'none';
+            document.querySelectorAll('.answer-display').forEach(display => {
+                display.style.display = 'none';
+            });
+            
+            // 更新进度条
+            updateProgressBar(0);
+            
+            // 重置状态
+            showResult = false;
+            document.getElementById('submitBtn').style.display = 'block';
+        }
+
+        // 输入处理
+        function onInput(e) {
+            const index = parseInt(e.target.dataset.index);
+            let value = e.target.value;
+            
+            // 过滤输入，只允许数字和小数点
+            value = value.replace(/[^\d.]/g, '');
+            
+            // 限制小数点的数量，最多一个
+            const dotCount = (value.match(/\./g) || []).length;
+            if (dotCount > 1) {
+                // 如果有多个小数点，只保留第一个
+                const parts = value.split('.');
+                value = parts[0] + '.' + parts.slice(1).join('');
+            }
+            
+            // 更新数据
+            currentQuestions[index].userAnswer = value;
+            e.target.value = value;
+            
+            // 更新进度条
+            updateProgress();
+        }
+
+        // 更新进度条
+        function updateProgress() {
+            const answeredCount = currentQuestions.filter(
+                item => item.userAnswer.trim() !== ''
+            ).length;
+            const totalCount = currentQuestions.length;
+            const progress = (answeredCount / totalCount) * 100;
+            
+            updateProgressBar(progress);
+        }
+
+        // 更新进度条显示
+        function updateProgressBar(percentage) {
+            document.getElementById('progress').style.width = `${percentage}%`;
+        }
+
+        // 提交答案
+        function submitAnswers() {
+            if (showResult) return;
+            
+            currentQuestions.forEach((item, index) => {
+                // 用户输入的是分母，需要转换为完整的分数格式进行比较
+                const userAnswer = item.userAnswer.trim();
+                const userFraction = userAnswer ? `1/${userAnswer}` : '';
+                
+                // 标准化用户输入的答案和正确答案
+                const normalizedUserAnswer = normalizeAnswer(userFraction);
+                const normalizedCorrectAnswer = normalizeAnswer(item.answer);
+                
+                const isCorrect = normalizedUserAnswer === normalizedCorrectAnswer;
+                
+                // 更新数据
+                currentQuestions[index].isCorrect = isCorrect;
+                currentQuestions[index].status = isCorrect ? 'correct' : 'incorrect';
+                
+                // 更新UI
+                const input = document.querySelector(`.answer-input[data-index="${index}"]`);
+                const answerDisplay = document.getElementById(`answerDisplay${index}`);
+                const answerStatus = document.getElementById(`answerStatus${index}`);
+                
+                input.classList.remove('correct', 'incorrect');
+                input.classList.add(isCorrect ? 'correct' : 'incorrect');
+                input.disabled = true;
+                
+                answerStatus.textContent = isCorrect ? '✓ 正确' : '✗ 错误';
+                answerStatus.className = `answer-status ${isCorrect ? 'correct' : 'incorrect'}`;
+                answerDisplay.style.display = 'block';
+            });
+
+            const correctCount = currentQuestions.filter(item => item.isCorrect).length;
+            const totalCount = currentQuestions.length;
+            const score = Math.round((correctCount / totalCount) * 100);
+
+            // 显示总成绩
+            document.getElementById('scoreNumber').textContent = `${score}分`;
+            document.getElementById('scoreDetail').textContent = `答对 ${correctCount}/${totalCount} 题`;
+            document.getElementById('totalScore').style.display = 'block';
+            
+            // 更新进度条
+            updateProgressBar(100);
+            
+            // 隐藏提交按钮
+            document.getElementById('submitBtn').style.display = 'none';
+            
+            // 设置状态
+            showResult = true;
+            
+            // 滚动到顶部
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            // 显示提交成功提示
+            alert(`答题完成！得分: ${score}`);
+        }
+
+        // 重置题目
+        function resetQuestions() {
+            init();
+        }
+
+        // 标准化答案格式
+        function normalizeAnswer(answer) {
+            return answer
+                .toLowerCase()
+                .replace(/\s+/g, '') // 去除所有空格
+                .replace(/／/g, '/') // 统一斜杠格式
+                .replace(/：/g, ':') // 统一冒号格式
+                .replace(/:/g, '/') // 将冒号转换为斜杠
+                .replace(/^(\d+)$/, '$1/1') // 如果是纯数字，转换为分数形式
+                .replace(/^\.(\d+)$/, '0.$1/1') // 如果是小数点开头
+                .replace(/^(\d+)\.(\d+)$/, '$1.$2/1'); // 如果是小数
+        }
+
+        // 绑定事件
+        document.getElementById('submitBtn').addEventListener('click', submitAnswers);
+        document.getElementById('resetBtn').addEventListener('click', resetQuestions);
+
+        // 初始化应用
+        window.onload = init;
+    </script>
+</body>
+</html>
